@@ -6,7 +6,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.schema import Document
-from langchain.chat_models import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains import RetrievalQA
 from dotenv import load_dotenv
 
@@ -81,12 +81,18 @@ class CourseSearchSystem:
         logger.info("Vector store created and persisted")
 
     def setup_qa_chain(self):
-        """Set up the QA chain with OpenAI"""
-        if not os.getenv("OPENAI_API_KEY"):
-            raise ValueError("OpenAI API key not found in environment variables")
+        """Set up the QA chain with Gemini"""
+        if not os.getenv("GEMINI_API_KEY"):
+            raise ValueError("Google API key not found in environment variables")
 
-        # Use ChatOpenAI instead of OpenAI for better results
-        llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+        # Initialize Gemini model
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-pro",
+            temperature=0,
+            convert_system_message_to_human=True,
+            google_api_key=os.getenv("GEMINI_API_KEY")
+        )
+        
         self.qa_chain = RetrievalQA.from_chain_type(
             llm=llm,
             chain_type="stuff",
@@ -101,8 +107,28 @@ class CourseSearchSystem:
             raise ValueError("QA chain not initialized. Run setup_qa_chain first.")
 
         logger.info(f"Searching for: {query}")
-        result = self.qa_chain.run(query)
-        return result
+        
+        try:
+            # Check if the query is related to courses
+            if not self._is_course_related(query):
+                return {
+                    "Search Result": "Please enter a query related to courses.",
+                    "Similar Courses": []
+                }
+
+            # Run the QA chain
+            result = self.qa_chain.run(query)
+            similar = self.similar_courses(query, n=3)
+            return {
+                "Search Result": result,
+                "Similar Courses": similar
+            }
+        except Exception as e:
+            logger.error(f"Error during search: {e}")
+            return {
+                "Search Result": "An error occurred while processing your query.",
+                "Similar Courses": []
+            }
 
     def similar_courses(self, course_title: str, n: int = 3) -> List[Dict]:
         """Find similar courses based on title"""
@@ -121,31 +147,8 @@ class CourseSearchSystem:
             for doc in results
         ]
 
-def main():
-    # Initialize the search system
-    search_system = CourseSearchSystem()
-    
-    # Load and process course data
-    documents = search_system.load_course_data("data/courses_data.json")
-    
-    # Create vector store
-    search_system.create_vector_store(documents)
-    
-    # Set up QA chain
-    search_system.setup_qa_chain()
-    
-    # Example searches
-    logger.info("\nTesting search functionality:")
-    
-    # Search for a specific topic
-    result = search_system.search_courses(
-        "What courses are available for machine learning beginners?"
-    )
-    logger.info(f"\nSearch result: {result}")
-    
-    # Find similar courses
-    similar = search_system.similar_courses("Python for Data Science")
-    logger.info(f"\nSimilar courses: {similar}")
-
-if __name__ == "__main__":
-    main()
+    def _is_course_related(self, query: str) -> bool:
+        """Check if the query is related to courses"""
+        # Add keywords or logic to determine if the query is course-related
+        course_keywords = ["course", "learn", "tutorial", "class", "training", "education"]
+        return any(keyword in query.lower() for keyword in course_keywords)
