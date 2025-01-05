@@ -1,2 +1,4 @@
 /venv
 .env
+/flagged
+/__pycache__
