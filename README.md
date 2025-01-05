@@ -67,7 +67,6 @@ pip install -r requirements.txt
 Create a .env file and add your Google API key:
 
 ```
-Copy
 GEMINI_API_KEY=your_api_key_here
 ```
 
